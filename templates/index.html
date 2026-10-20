@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Moodle Bulk User Import</title>
+<style>
+  :root { --blue: #0f4c81; --blue-light: #e8f0f8; --err: #b3261e; --err-bg: #fdecea; --ok: #1e7b34; --border: #cfd8e3; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: "Segoe UI", Arial, sans-serif; background: #f1f3f6; color: #1f2933; }
+  header { background: var(--blue); color: #fff; padding: 16px 24px; display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
+  header h1 { margin: 0; font-size: 20px; }
+  header p { margin: 4px 0 0; opacity: .85; font-size: 14px; }
+  header nav a { color: #fff; text-decoration: none; border: 1px solid rgba(255,255,255,.5); border-radius: 4px; padding: 6px 12px; font-size: 14px; }
+  header nav a:hover { background: rgba(255,255,255,.12); }
+  main { max-width: 1200px; margin: 24px auto; padding: 0 16px; }
+  .card { background: #fff; border-radius: 8px; padding: 20px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+  .card h2 { margin: 0 0 12px; font-size: 16px; color: var(--blue); }
+  .form-row { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end; }
+  label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; font-weight: 600; }
+  input, select { font: inherit; font-size: 14px; padding: 7px 8px; border: 1px solid var(--border); border-radius: 4px; width: 100%; background: #fff; }
+  input:focus, select:focus { outline: 2px solid #8ab4e0; border-color: var(--blue); }
+  button { font: inherit; font-size: 14px; border: 0; border-radius: 4px; padding: 8px 14px; cursor: pointer; }
+  .primary { background: var(--blue); color: #fff; font-weight: 600; }
+  .primary:disabled { opacity: .6; cursor: wait; }
+  .secondary { background: var(--blue-light); color: var(--blue); }
+  .remove { background: none; color: #7b8794; font-size: 18px; padding: 4px 8px; }
+  .remove:hover { color: var(--err); }
+  .hint { font-size: 13px; color: #52606d; margin: 8px 0 0; }
+  .table-wrap { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; min-width: 900px; }
+  th { background: var(--blue-light); color: var(--blue); text-align: left; font-size: 12px; padding: 8px 6px; text-transform: uppercase; }
+  td { padding: 4px; border-bottom: 1px solid #eef1f4; vertical-align: top; }
+  td.num { color: #7b8794; font-size: 12px; padding-top: 12px; width: 32px; text-align: right; }
+  tr.has-error td { background: var(--err-bg); }
+  .error-msg { color: var(--err); font-size: 12px; margin-top: 2px; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: space-between; margin-top: 12px; }
+  .notice { padding: 12px 14px; border-radius: 6px; font-size: 14px; margin-bottom: 16px; }
+  .notice.error { background: var(--err-bg); color: var(--err); }
+  .notice.ok { background: #e6f4ea; color: var(--ok); }
+  .notice ul { margin: 8px 0 0; padding-left: 20px; }
+  .downloads a { display: inline-block; margin: 8px 8px 0 0; padding: 8px 14px; background: var(--ok); color: #fff; border-radius: 4px; text-decoration: none; font-weight: 600; }
+  code { background: #eef1f4; padding: 1px 4px; border-radius: 3px; }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Moodle Bulk User Import</h1>
+    <p>Generates the Moodle upload files (CSV, PDF and XLSX) from a simple form or spreadsheet.</p>
+  </div>
+  <nav><a href="/courses">Manage courses</a></nav>
+</header>
+
+<main>
+  <div id="notice"></div>
+
+  <section class="card">
+    <h2>1. Organization</h2>
+    <div class="form-row">
+      <label style="max-width:220px">Organization code *
+        <input id="org" placeholder="e.g. ACME" autocomplete="off">
+      </label>
+      <label style="max-width:320px">Apply course to all rows
+        <select id="course-all">
+          <option value="">— choose —</option>
+          {% for course in courses %}<option>{{ course }}</option>{% endfor %}
+        </select>
+      </label>
+      <label style="max-width:360px">Or load a registration sheet (.xlsx)
+        <input type="file" id="file" accept=".xlsx,.xlsm">
+      </label>
+    </div>
+    <p class="hint">All users in the same batch must belong to the <strong>same organization</strong>. Different units are allowed.</p>
+  </section>
+
+  <section class="card">
+    <h2>2. Users</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th></th><th>Unit *</th><th>Full name *</th><th>CPF *</th><th>E-mail *</th><th>Course *</th><th></th></tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+    <p class="hint">Tip: copy rows from a spreadsheet (Excel/Sheets) and paste (Ctrl+V) into any table field.
+      Accepts the columns <code>Unit · Name · CPF · E-mail · Course</code> or the full sheet starting with the <code>Org code</code>.</p>
+    <div class="actions">
+      <div>
+        <button type="button" class="secondary" id="add">+ Add row</button>
+        <button type="button" class="secondary" id="clear">Clear all</button>
+      </div>
+      <button type="button" class="primary" id="generate">Generate files</button>
+    </div>
+  </section>
+</main>
+
+<template id="tpl-row">
+  <tr>
+    <td class="num"></td>
+    <td><input data-field="unit"></td>
+    <td><input data-field="name"></td>
+    <td><input data-field="cpf" inputmode="numeric" style="width:130px"></td>
+    <td><input data-field="email" type="email"></td>
+    <td>
+      <select data-field="course">
+        <option value=""></option>
+        {% for course in courses %}<option>{{ course }}</option>{% endfor %}
+      </select>
+    </td>
+    <td><button type="button" class="remove" title="Remove row">&times;</button></td>
+  </tr>
+</template>
+
+<script>
+const FIELDS = ["unit", "name", "cpf", "email", "course"];
+const tbody = document.getElementById("rows");
+const tpl = document.getElementById("tpl-row");
+const notice = document.getElementById("notice");
+const org = document.getElementById("org");
+
+function renumber() {
+  [...tbody.rows].forEach((tr, i) => tr.cells[0].textContent = i + 1);
+}
+
+function newRow(data = {}) {
+  const tr = tpl.content.firstElementChild.cloneNode(true);
+  FIELDS.forEach(f => setValue(tr.querySelector(`[data-field=${f}]`), data[f] || ""));
+  tbody.appendChild(tr);
+  renumber();
+  return tr;
+}
+
+function setValue(el, value) {
+  value = String(value).trim();
+  if (el.tagName === "SELECT" && value && ![...el.options].some(o => o.value === value)) {
+    // course not in the list: keep it so the user can see and fix it
+    el.add(new Option(value + " (not in list)", value));
+  }
+  el.value = value;
+}
+
+function isEmptyRow(tr) {
+  return FIELDS.every(f => !tr.querySelector(`[data-field=${f}]`).value.trim());
+}
+
+function readRows() {
+  return [...tbody.rows].map(tr => {
+    const d = { org: org.value };
+    FIELDS.forEach(f => d[f] = tr.querySelector(`[data-field=${f}]`).value);
+    return d;
+  });
+}
+
+function loadRows(records) {
+  const orgs = [...new Set(records.map(r => (r.org || "").trim().toUpperCase()).filter(Boolean))];
+  if (orgs.length) org.value = orgs[0];
+  [...tbody.rows].filter(isEmptyRow).forEach(tr => tr.remove());
+  records.forEach(r => newRow(r));
+  if (!tbody.rows.length) newRow();
+  renumber();
+  if (orgs.length > 1) {
+    showNotice("error", `The sheet has more than one organization (${orgs.join(", ")}). Each batch must have only one — split it into separate batches.`);
+  } else {
+    showNotice("ok", `${records.length} row(s) loaded. Review the data and click "Generate files".`);
+  }
+}
+
+function showNotice(type, html) {
+  notice.innerHTML = `<div class="notice ${type}">${html}</div>`;
+  notice.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function clearErrors() {
+  [...tbody.rows].forEach(tr => {
+    tr.classList.remove("has-error");
+    tr.querySelectorAll(".error-msg").forEach(e => e.remove());
+  });
+}
+
+function escapeHtml(t) {
+  return String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+}
+
+// Paste several rows from a spreadsheet (TAB separated)
+tbody.addEventListener("paste", ev => {
+  const text = ev.clipboardData.getData("text");
+  if (!text.includes("\t") && !text.includes("\n")) return;
+  ev.preventDefault();
+  const lines = text.replace(/\r/g, "").split("\n").filter(l => l.trim());
+  const records = lines.map(l => {
+    const cols = l.split("\t");
+    const hasOrg = cols.length >= 6;
+    if (hasOrg && !org.value) org.value = cols[0].trim().toUpperCase();
+    const v = hasOrg ? cols.slice(1) : cols;
+    return Object.fromEntries(FIELDS.map((f, i) => [f, v[i] || ""]));
+  }).filter(r => !/FULL NAME|NOME COMPLETO/i.test(r.name));  // skip a header pasted along
+  [...tbody.rows].filter(isEmptyRow).forEach(tr => tr.remove());
+  records.forEach(r => newRow(r));
+  renumber();
+});
+
+tbody.addEventListener("click", ev => {
+  if (!ev.target.classList.contains("remove")) return;
+  ev.target.closest("tr").remove();
+  if (!tbody.rows.length) newRow();
+  renumber();
+});
+
+document.getElementById("add").onclick = () => newRow().querySelector("input").focus();
+
+document.getElementById("clear").onclick = () => {
+  if (!confirm("Delete all rows?")) return;
+  tbody.innerHTML = "";
+  notice.innerHTML = "";
+  for (let i = 0; i < 5; i++) newRow();
+};
+
+document.getElementById("course-all").onchange = ev => {
+  if (!ev.target.value) return;
+  [...tbody.rows].forEach(tr => setValue(tr.querySelector("[data-field=course]"), ev.target.value));
+  ev.target.value = "";
+};
+
+document.getElementById("file").onchange = async ev => {
+  const file = ev.target.files[0];
+  if (!file) return;
+  const form = new FormData();
+  form.append("file", file);
+  const resp = await fetch("/api/read-sheet", { method: "POST", body: form });
+  const json = await resp.json();
+  ev.target.value = "";
+  if (!resp.ok) return showNotice("error", escapeHtml(json.error));
+  loadRows(json.rows);
+};
+
+document.getElementById("generate").onclick = async ev => {
+  const button = ev.target;
+  clearErrors();
+  if (!org.value.trim()) {
+    org.focus();
+    return showNotice("error", "Enter the organization code.");
+  }
+  button.disabled = true;
+  button.textContent = "Generating...";
+  try {
+    const filled = [...tbody.rows].filter(tr => !isEmptyRow(tr));
+    const resp = await fetch("/api/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ rows: readRows() }),
+    });
+    const json = await resp.json();
+    if (!resp.ok) {
+      (json.rows || []).forEach(({ row, errors }) => {
+        const tr = filled[row - 1];
+        if (!tr) return;
+        tr.classList.add("has-error");
+        tr.cells[2].insertAdjacentHTML("beforeend", `<div class="error-msg">${errors.map(escapeHtml).join(" · ")}</div>`);
+      });
+      return showNotice("error", escapeHtml(json.error));
+    }
+    const links = Object.entries(json.files).map(([kind, f]) =>
+      `<a href="/download/${kind}/${encodeURIComponent(f.name)}">Download ${kind.toUpperCase()}</a>`).join("");
+    const paths = Object.values(json.files).map(f => `<li><code>${escapeHtml(f.path)}</code></li>`).join("");
+    showNotice("ok", `<strong>${json.total} user(s) processed.</strong> Files saved to:<ul>${paths}</ul>
+      <div class="downloads">${links}</div>
+      <p class="hint">In Moodle (Site administration → Users → Upload users), attach the CSV and choose
+      <strong>CSV delimiter: ${escapeHtml(json.delimiter)}</strong> and <strong>Encoding: UTF-8</strong>.</p>`);
+  } catch (e) {
+    showNotice("error", "Server communication error: " + escapeHtml(e.message));
+  } finally {
+    button.disabled = false;
+    button.textContent = "Generate files";
+  }
+};
+
+for (let i = 0; i < 5; i++) newRow();
+</script>
+</body>
+</html>

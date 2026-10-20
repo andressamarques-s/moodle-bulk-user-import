@@ -1,0 +1,8 @@
+# Moodle course short names (one per line). Edit here or on the "Courses" page of the app.
+# The text must match the course short name in Moodle (column course1 of the CSV).
+Onboarding
+Information Security
+Workplace Safety
+First Aid
+Data Privacy (LGPD)
+Code of Conduct

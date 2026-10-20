@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Courses - Moodle Bulk User Import</title>
+<style>
+  :root { --blue: #0f4c81; --blue-light: #e8f0f8; --err: #b3261e; --err-bg: #fdecea; --ok: #1e7b34; --border: #cfd8e3; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: "Segoe UI", Arial, sans-serif; background: #f1f3f6; color: #1f2933; }
+  header { background: var(--blue); color: #fff; padding: 16px 24px; display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
+  header h1 { margin: 0; font-size: 20px; }
+  header p { margin: 4px 0 0; opacity: .85; font-size: 14px; }
+  header nav a { color: #fff; text-decoration: none; border: 1px solid rgba(255,255,255,.5); border-radius: 4px; padding: 6px 12px; font-size: 14px; }
+  header nav a:hover { background: rgba(255,255,255,.12); }
+  main { max-width: 720px; margin: 24px auto; padding: 0 16px; }
+  .card { background: #fff; border-radius: 8px; padding: 20px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+  .card h2 { margin: 0 0 12px; font-size: 16px; color: var(--blue); }
+  form { display: flex; gap: 8px; }
+  input { flex: 1; font: inherit; font-size: 14px; padding: 7px 8px; border: 1px solid var(--border); border-radius: 4px; }
+  input:focus { outline: 2px solid #8ab4e0; border-color: var(--blue); }
+  button { font: inherit; font-size: 14px; border: 0; border-radius: 4px; padding: 8px 14px; cursor: pointer; }
+  .primary { background: var(--blue); color: #fff; font-weight: 600; }
+  .hint { font-size: 13px; color: #52606d; margin: 8px 0 0; }
+  ul { list-style: none; margin: 0; padding: 0; }
+  li { display: flex; justify-content: space-between; align-items: center; padding: 8px 4px; border-bottom: 1px solid #eef1f4; }
+  li:last-child { border-bottom: 0; }
+  .remove { background: none; color: #7b8794; font-size: 13px; padding: 4px 8px; }
+  .remove:hover { color: var(--err); background: var(--err-bg); }
+  .notice { padding: 10px 14px; border-radius: 6px; font-size: 14px; margin-bottom: 16px; }
+  .notice.error { background: var(--err-bg); color: var(--err); }
+  .notice.ok { background: #e6f4ea; color: var(--ok); }
+  .total { font-weight: 400; color: #52606d; font-size: 13px; }
+  code { background: #eef1f4; padding: 1px 4px; border-radius: 3px; }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Moodle courses</h1>
+    <p>List used in the "Course" field of the form.</p>
+  </div>
+  <nav><a href="/">&larr; Back to the form</a></nav>
+</header>
+
+<main>
+  <div id="notice"></div>
+
+  <section class="card">
+    <h2>Add course</h2>
+    <form id="add-form">
+      <input id="new-course" placeholder="e.g. Safety 101" autocomplete="off" required>
+      <button class="primary">Add</button>
+    </form>
+    <p class="hint">Type the name <strong>exactly as</strong> the course short name in Moodle.
+      This text goes in the <code>course1</code> column of the CSV.</p>
+  </section>
+
+  <section class="card">
+    <h2>Registered courses <span class="total" id="total"></span></h2>
+    <ul id="list"></ul>
+  </section>
+</main>
+
+<script>
+const list = document.getElementById("list");
+const notice = document.getElementById("notice");
+let courses = {{ courses | tojson }};
+
+function escapeHtml(t) {
+  return String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+}
+
+function showNotice(type, text) {
+  notice.innerHTML = `<div class="notice ${type}">${escapeHtml(text)}</div>`;
+}
+
+function render() {
+  document.getElementById("total").textContent = `(${courses.length})`;
+  list.innerHTML = courses.map((c, i) =>
+    `<li><span>${escapeHtml(c)}</span><button class="remove" data-i="${i}">Remove</button></li>`).join("");
+}
+
+async function send(method, course) {
+  const resp = await fetch("/api/courses", {
+    method,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ course }),
+  });
+  const json = await resp.json();
+  if (!resp.ok) throw new Error(json.error);
+  courses = json.courses;
+  render();
+}
+
+document.getElementById("add-form").onsubmit = async ev => {
+  ev.preventDefault();
+  const field = document.getElementById("new-course");
+  const course = field.value.trim();
+  try {
+    await send("POST", course);
+    field.value = "";
+    showNotice("ok", `Course "${course}" added.`);
+  } catch (e) {
+    showNotice("error", e.message);
+  }
+  field.focus();
+};
+
+list.onclick = async ev => {
+  if (!ev.target.classList.contains("remove")) return;
+  const course = courses[ev.target.dataset.i];
+  if (!confirm(`Remove the course "${course}" from the list?`)) return;
+  try {
+    await send("DELETE", course);
+    showNotice("ok", `Course "${course}" removed.`);
+  } catch (e) {
+    showNotice("error", e.message);
+  }
+};
+
+render();
+</script>
+</body>
+</html>
